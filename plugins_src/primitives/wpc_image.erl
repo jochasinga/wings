@@ -172,7 +172,7 @@ make_image_0({ImageId,{MaxU,MaxV},{AspX,AspY}}, Arg, Owner, #st{mat=Mat0}=St0) -
                   {diffuse,WhiteT},
                   {specular,Black},
                   {ambient,Black}]},
-             {maps,[{diffuse,ImageId}]}]}],
+             {maps,[{emission,ImageId}]}]}],
 
     Mat = if Transparent==true -> lists:flatten(lists:append(M,get_transp_mat(Mat0)));
         true -> M end,
