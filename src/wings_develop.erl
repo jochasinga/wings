@@ -66,7 +66,7 @@ command(opengl_shaders, _) ->
     wings_wm:dirty(),
     keep;
 command(recalc_env, _) ->
-    wings_image:load_envmap("grandcanyon.png", true),
+    wings_light:init(true),
     wings_wm:dirty(),
     keep;
 
