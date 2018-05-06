@@ -648,6 +648,7 @@ edit_dialog(Name, Assign, St=#st{mat=Mtab0}, Mat0) ->
     Roug0 = prop_get(roughness, OpenGL0),
     {Emiss0,_} = ask_prop_get(emission, OpenGL0),
     Preview = fun(GLCanvas, Fields) ->
+                      wings_light:init_opengl(),
                       mat_preview(GLCanvas,Fields,prop_get(maps,Mat0))
 	      end,
     Refresh = fun(_Key, _Value, Fields) ->
@@ -657,19 +658,21 @@ edit_dialog(Name, Assign, St=#st{mat=Mtab0}, Mat0) ->
     RHook = {hook, Refresh},
     AnyTexture = has_texture(Mat0),
     VtxColMenu = vertex_color_menu(AnyTexture, VertexColors0),
-    R01 = {range,{0.0,1.0}},
+    OptDef = [RHook, {proportion,1}],
+    TexOpt = [{range,{0.0,1.0}}, {digits, 6}|OptDef],
+
     Qs1 = {vframe,
 	   [
 	    {hframe,
 	     [{custom_gl,?PREVIEW_SIZE,?PREVIEW_SIZE+5,Preview, [{key, preview}]},
 	      {label_column,
-	       [{?__(1,"Diffuse"),   {slider,{color,Diff0, [{key,diffuse},RHook]}}},
-		{?__(7,"Metallic"), {slider,{text, Met0,  [R01,{key,metallic},RHook]}}},
-		{?__(8,"Roughness"), {slider,{text, Roug0, [R01,{key,roughness},RHook]}}},
-		{?__(4,"Emission"),  {slider,{color,Emiss0,[{key,emission}, RHook]}}}
-	       ]}]},
+	       [{?__(1,"Diffuse"),   {slider,{color,Diff0, [{key,diffuse}|OptDef]}}},
+		{?__(7,"Metallic"),  {slider,{text, Met0,  [{key,metallic}|TexOpt]}}},
+		{?__(8,"Roughness"), {slider,{text, Roug0, [{key,roughness}|TexOpt]}}},
+		{?__(4,"Emission"),  {slider,{color,Emiss0,[{key,emission}|OptDef]}}}
+	       ], [{proportion,1}]}]},
 	    {label_column,
-	     [{?__(6,"Opacity"), {slider,{text,Opacity0, [R01, {key,opacity}, RHook]}}},
+	     [{?__(6,"Opacity"), {slider,{text,Opacity0, [{key,opacity}|TexOpt]}}},
               {"Vertex Colors", VtxColMenu}
 	     ]}
            ]
@@ -741,11 +744,9 @@ mat_preview(Canvas, Common, Maps) ->
     gl:clearColor(BGC(BR),BGC(BG),BGC(BB),1.0),
     gl:clear(?GL_COLOR_BUFFER_BIT bor ?GL_DEPTH_BUFFER_BIT),
     gl:matrixMode(?GL_PROJECTION),
-    gl:pushMatrix(),
     gl:loadIdentity(),
     glu:perspective(60.0, 1.0, 0.01, 256.0),
     gl:matrixMode(?GL_MODELVIEW),
-    gl:pushMatrix(),
     gl:loadIdentity(),
     gl:translatef(0.0, 0.0, -2.0),
     gl:shadeModel(?GL_SMOOTH),
@@ -755,13 +756,17 @@ mat_preview(Canvas, Common, Maps) ->
     Metal = {metallic, wings_dialog:get_value(metallic, Common)},
     Rough = {roughness, wings_dialog:get_value(roughness, Common)},
     Material = [Diff, Emis, Metal, Rough,
-                {{tex,diffuse}, get_texture_map(diffuse, Maps)}],
+                {{tex,diffuse},   get_texture_map(diffuse, Maps)},
+                {{tex,normal},    none}, %% get_normal_map(Maps)},  %% Have no tangents
+                {{tex,metallic},  get_texture_map(metallic, Maps)},
+                {{tex,emission},  get_texture_map(emission, Maps)},
+                {{tex,occlusion}, get_texture_map(occlusion, Maps)}],
 
     Obj = glu:newQuadric(),
     gl:enable(?GL_BLEND),
     gl:enable(?GL_DEPTH_TEST),
     gl:enable(?GL_CULL_FACE),
-    gl:rotatef(-90.0,1.0,0.0,0.0),
+    gl:blendFunc(?GL_SRC_ALPHA, ?GL_ONE_MINUS_SRC_ALPHA),
     gl:color4ub(255, 255, 255, 255),
     glu:quadricDrawStyle(Obj, ?GLU_FILL),
     glu:quadricNormals(Obj, ?GLU_SMOOTH),
@@ -769,9 +774,10 @@ mat_preview(Canvas, Common, Maps) ->
 
     RS0 = wings_shaders:use_prog(1, #{}),
     RS1 = lists:foldl(fun apply_material_3/2, RS0, Material),
+    RS2 = wings_shaders:set_uloc(ws_eyepoint, {0.0,0.0,2.0}, RS1),
     glu:sphere(Obj, 0.9, 50, 50),
     glu:deleteQuadric(Obj),
-    wings_shaders:use_prog(0, RS1),
+    wings_shaders:use_prog(0, RS2),
     gl:disable(?GL_BLEND),
     gl:shadeModel(?GL_FLAT),
     gl:matrixMode(?GL_PROJECTION),
