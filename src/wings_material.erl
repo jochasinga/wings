@@ -306,7 +306,7 @@ def_metallic(P, Diff) ->
         undefined ->
             case prop_get(specular, P) of
                 undefined -> ?DEF_METALLIC;
-                Spec -> specular_to_metal(Spec, Diff)
+                Spec -> specular_to_metal(norm(Spec), Diff)
             end;
         Def when is_float(Def) -> Def
     end.
@@ -500,7 +500,8 @@ add_old_props(Mat) ->
                     Spec = specular_from_metal(prop_get(metallic, GL, ?DEF_METALLIC),
                                                prop_get(diffuse, GL)),
                     Rough = prop_get(roughness, GL, ?DEF_ROUGHNESS),
-                    [{ambient, {0.0,0.0,0.0}}, {specular, Spec}, {shininess, 1.0 - Rough} | GL];
+                    [{ambient, {0.0,0.0,0.0,0.0}}, {specular, Spec},
+                     {shininess, 1.0 - Rough} | GL];
                 _ -> GL
             end,
     [{opengl, Added}|lists:keydelete(opengl, 1, Mat)].
