@@ -322,8 +322,8 @@ def_roughness(P) ->
     end.
 
 %% For future compatibility, ignore anything that we don't recognize.
-valid_vertex_color(multiply=A) -> A;
-valid_vertex_color(set=A) -> A;
+valid_vertex_color(multiply) -> set;
+valid_vertex_color(set) -> set;
 valid_vertex_color(_) -> ignore.
 
 norm({_,_,_,_}=Color) -> Color;
@@ -418,7 +418,7 @@ has_texture(Name, Mtab) ->
 
 has_texture(Mat) ->
     Maps = prop_get(maps, Mat, []),
-    none =/= prop_get(diffuse, Maps, none).
+    Maps =/= [].
 
 apply_material(Name, Mtab, false, RS0) ->
     case wings_shaders:set_state(material, Name, RS0) of
@@ -617,15 +617,7 @@ needs_vertex_colors(Mat) ->
     prop_get(vertex_colors, OpenGL, ignore) =/= ignore.
 
 needs_uvs(Mat) ->
-    OpenGL = prop_get(opengl, Mat),
-    case prop_get(vertex_colors, OpenGL, ignore) of
-	set ->
-	    %% Vertex colors overrides the texture (if any).
-	    false;
-	_ ->
-	    %% We need UV coordinates if there is a diffuse texture.
-	    has_texture(Mat)
-    end.
+    has_texture(Mat).
 
 needs_tangents(Mat) ->
     Maps = prop_get(maps, Mat, []),
@@ -656,8 +648,7 @@ edit_dialog(Name, Assign, St=#st{mat=Mtab0}, Mat0) ->
 		      wxWindow:refresh(GLCanvas)
 	      end,
     RHook = {hook, Refresh},
-    AnyTexture = has_texture(Mat0),
-    VtxColMenu = vertex_color_menu(AnyTexture, VertexColors0),
+    VtxColMenu = vertex_color_menu(VertexColors0),
     OptDef = [RHook, {proportion,1}],
     TexOpt = [{range,{0.0,1.0}}, {digits, 6}|OptDef],
 
@@ -699,20 +690,11 @@ edit_dialog(Name, Assign, St=#st{mat=Mtab0}, Mat0) ->
 	  end,
     {dialog,Qs,Ask}.
 
-vertex_color_menu(MultiplyPossible, Def0) ->
-    Def = case MultiplyPossible of
-	      true -> Def0;
-	      false when Def0 =:= multiply -> set;
-	      false -> Def0
-	  end,
+vertex_color_menu(multiply) ->
+    vertex_color_menu(set);
+vertex_color_menu(Def) ->
     {menu,[{"Ignore",ignore,[{info,"Ignore vertex colors"}]},
-	   {"Set",set,[{info,"Show vertex colors"}]}|
-	   case MultiplyPossible of
-	       true ->
-		   [{"Multiply",multiply,
-		     [{info,"Multiply texture colors with vertex colors"}]}];
-	       false -> []
-	   end],Def,
+	   {"Set",set,[{info,"Show vertex colors"}]}],Def,
      [{info,"Choose how to use vertex colors"},
       {key,vertex_colors}]}.
 
