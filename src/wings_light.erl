@@ -905,14 +905,19 @@ load_area_light_tab(LTCmat) ->
     {areamatrix_tex, ImId}.
 
 make_envmap(CL, EnvImgRec0) ->
+    wings_pb:start(?__(1, "Building envmaps")),
     EnvImgRec = e3d_image:convert(EnvImgRec0, r8g8b8a8, 1, lower_left),
+    wings_pb:update(0.1),
     W = 512, H = 256,  %% Sizes for result images
     OrigImg = wings_cl:image(EnvImgRec, CL),
     Buff0   = wings_cl:buff(W*512*4*4, [read_write], CL),
     Buff1   = wings_cl:buff(W*512*4*4, [read_write], CL),
-    DiffId = make_diffuse(OrigImg, Buff0, Buff1, W, H, CL),
-    SpecId = make_spec(OrigImg, Buff0, Buff1, W, H, CL),
     BrdfId = make_brdf(Buff0, 512, 512, CL),
+    wings_pb:update(0.5),
+    DiffId = make_diffuse(OrigImg, Buff0, Buff1, W, H, CL),
+    wings_pb:update(0.9),
+    SpecId = make_spec(OrigImg, Buff0, Buff1, W, H, CL),
+    wings_pb:done(),
     cl:release_mem_object(OrigImg),
     cl:release_mem_object(Buff0),
     cl:release_mem_object(Buff1),
