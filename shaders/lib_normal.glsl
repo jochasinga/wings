@@ -9,7 +9,6 @@ uniform sampler2D NormalMap;
 
 varying vec3 ws_normal;
 varying vec4 ws_tangent;
-varying mat3 ws_TBN;
 
 vec3 get_normal() {
     vec3 T = normalize(ws_tangent.xyz);
@@ -24,7 +23,6 @@ vec3 get_normal() {
     vec3 B = cross(T, N) * ws_tangent.w;
     mat3 TBN = mat3(T, B, N);
     vec3 NewNormal = TBN * BumpMapNormal;
-    // vec3 NewNormal = ws_TBN * BumpMapNormal;
     NewNormal = normalize(NewNormal);
     return backface*NewNormal;
 }
