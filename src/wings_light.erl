@@ -61,7 +61,7 @@ init(Recompile) ->
     DefEnvMap = "grandcanyon.png",
     EnvImgRec = wings_image:image_read([{filename, filename:join(Path, DefEnvMap)}]),
     EnvIds = case cl_setup(Recompile) of
-                 {error, _} -> fake_envmap(EnvImgRec);
+                 {error, _} -> fake_envmap(Path, EnvImgRec);
                  CL -> make_envmap(CL, EnvImgRec)
              end,
     [?SET(Tag, Id) || {Tag,Id} <- [AreaMatTxId|EnvIds]],
@@ -910,19 +910,57 @@ load_area_light_tab(LTCmat) ->
     ?CHECK_ERROR(),
     {areamatrix_tex, ImId}.
 
-fake_envmap(EnvImgRec) ->
-    io:format(?__(1, "Could not initialize OpenCL: lighting limited"),[]),
-    %% Poor mans version
+fake_envmap(Path, EnvImgRec) ->
+    ErrorStr = ?__(1, "Could not initialize OpenCL: env lighting limited"),
+    io:format(ErrorStr,[]),
+    wings_status:message(geom, ErrorStr),
+    %% Poor mans version with blured images
     SpecBG = wings_image:e3d_to_wxImage(EnvImgRec),
     wxImage:rescale(SpecBG, 512, 256, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
-    DiffBG = wxImage:scale(SpecBG, 16, 8, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
-    SBG = wings_image:wxImage_to_e3d(SpecBG),
-    DBG = wings_image:wxImage_to_e3d(DiffBG),
+    SBG0 = wings_image:wxImage_to_e3d(SpecBG),
+    Opts = [{wrap, {repeat,clamp}}, {filter, {linear, linear}}],
+    SBG = SBG0#e3d_image{opts=Opts},
+    SpecId = wings_image:new_hidden(env_spec_tex, SBG),
+    TxId = wings_image:txid(SpecId),
+    gl:bindTexture(?GL_TEXTURE_2D, TxId),
+    gl:texParameteri(?GL_TEXTURE_2D, ?GL_TEXTURE_MAX_LEVEL, 6),
+    gl:texParameteri(?GL_TEXTURE_2D, ?GL_TEXTURE_MIN_FILTER, ?GL_LINEAR_MIPMAP_LINEAR),
+    make_mipmaps(wxImage:mirror(SpecBG, [{horizontally, false}]), 1, 256, 128),
+    gl:bindTexture(?GL_TEXTURE_2D, 0),
+
+    DiffBG0 = wxImage:blur(SpecBG, 5),
+    wxImage:rescale(DiffBG0, 64, 32, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+    DiffBG = wxImage:blur(DiffBG0, 5),
+    DBG0 = wings_image:wxImage_to_e3d(DiffBG),
+    DBG = DBG0#e3d_image{opts=Opts},
     wxImage:destroy(SpecBG),
+    wxImage:destroy(DiffBG0),
     wxImage:destroy(DiffBG),
-    [{env_spec_tex,    wings_image:new_hidden(env_spec_tex, SBG)},
-     {env_diffuse_tex, wings_image:new_hidden(env_diffuse_tex, DBG)}
-    ].
+    {ok, BrdfBin0} = file:read_file(filename:join(Path,"brdf_tab.bin")),
+    128*128*2 = byte_size(BrdfBin0),
+    BrdfBin = << << R,G,0 >> || << R,G >> <= BrdfBin0 >>,
+    OptsB = [{wrap, {clamp,clamp}}, {filter, {linear, linear}}],
+    Brdf = #e3d_image{width=128,height=128,image=BrdfBin,opts=OptsB},
+    %% wings_image:debug_display(brdf, Brdf),
+    %% wings_image:debug_display(spec, SBG),
+    %% wings_image:debug_display(diff, DBG),
+    [{env_spec_tex,    SpecId},
+     {env_diffuse_tex, wings_image:new_hidden(env_diffuse_tex, DBG)},
+     {brdf_tex,        wings_image:new_hidden(brdf_tex, Brdf)}].
+
+make_mipmaps(Img0, Level, W, H) when Level < 7 ->
+    wxImage:rescale(Img0, W, H),
+    Img = wxImage:blur(Img0, 4),
+    wxImage:destroy(Img0),
+    Bin = wxImage:getData(Img),
+    %% wings_image:debug_display(1000-Level,
+    %%                           #e3d_image{width=W, height=H, image=Bin,
+    %%                                      name="Spec: " ++ integer_to_list(Level)}),
+    gl:texImage2D(?GL_TEXTURE_2D, Level, ?GL_RGB, W, H, 0, ?GL_RGB, ?GL_UNSIGNED_BYTE, Bin),
+    make_mipmaps(Img, Level+1, W div 2, H div 2);
+make_mipmaps(Img, _, _, _) ->
+    wxImage:destroy(Img),
+    ok.
 
 make_envmap(CL, EnvImgRec0) ->
     wings_pb:start(?__(1, "Building envmaps")),
@@ -950,7 +988,7 @@ make_brdf(Buff, W, H, CL) ->
     {ok, BrdfData} = cl:wait(Read),
     Img = << << (round(X*255)), (round(Y*255)), 0 >>
              || <<X:32/float-native, Y:32/float-native>> <= BrdfData >>,
-    %% wings_image:debug_display(1000+TxId,#e3d_image{width=W, height=H, image=Img, name="BRDF"}),
+    %% wings_image:debug_display(brdf,#e3d_image{width=W, height=H, image=Img, name="BRDF"}),
     Opts = [{wrap, {clamp,clamp}}, {filter, {linear, linear}}],
     ImId = wings_image:new_hidden(brdf_tex, #e3d_image{width=W,height=H,image=Img,opts=Opts}),
     {brdf_tex, ImId}.
