@@ -58,10 +58,12 @@ init(Recompile) ->
     LTCmatFile = "areal_ltcmat.bin",
     {ok, LTCmat} = file:read_file(filename:join(Path, LTCmatFile)),
     AreaMatTxId = load_area_light_tab(LTCmat),
-    CL = cl_setup(Recompile),
     DefEnvMap = "grandcanyon.png",
     EnvImgRec = wings_image:image_read([{filename, filename:join(Path, DefEnvMap)}]),
-    EnvIds = make_envmap(CL, EnvImgRec),
+    EnvIds = case cl_setup(Recompile) of
+                 {error, _} -> fake_envmap(EnvImgRec);
+                 CL -> make_envmap(CL, EnvImgRec)
+             end,
     [?SET(Tag, Id) || {Tag,Id} <- [AreaMatTxId|EnvIds]],
     init_opengl(),
     wings_develop:gl_error_check({?MODULE,?FUNCTION_NAME}),
@@ -74,10 +76,14 @@ init_opengl() ->
            {env_diffuse_tex, ?ENV_DIFF_MAP_UNIT},
            {env_spec_tex, ?ENV_SPEC_MAP_UNIT}],
     SetupUnit = fun({Tag, Unit}) ->
-                        TxId = wings_image:txid(?GET(Tag)),
-                        gl:activeTexture(?GL_TEXTURE0 + Unit),
-                        gl:bindTexture(?GL_TEXTURE_2D, TxId),
-                        gl:activeTexture(?GL_TEXTURE0)
+                        case ?GET(Tag) of
+                            undefined -> ignore;
+                            ImId ->
+                                TxId = wings_image:txid(ImId),
+                                gl:activeTexture(?GL_TEXTURE0 + Unit),
+                                is_integer(TxId) andalso gl:bindTexture(?GL_TEXTURE_2D, TxId),
+                                gl:activeTexture(?GL_TEXTURE0)
+                        end
                 end,
     _ = [SetupUnit(Id) || Id <- Ids],
     ok.
@@ -903,6 +909,20 @@ load_area_light_tab(LTCmat) ->
                                             }),
     ?CHECK_ERROR(),
     {areamatrix_tex, ImId}.
+
+fake_envmap(EnvImgRec) ->
+    io:format(?__(1, "Could not initialize OpenCL: lighting limited"),[]),
+    %% Poor mans version
+    SpecBG = wings_image:e3d_to_wxImage(EnvImgRec),
+    wxImage:rescale(SpecBG, 512, 256, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+    DiffBG = wxImage:scale(SpecBG, 16, 8, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+    SBG = wings_image:wxImage_to_e3d(SpecBG),
+    DBG = wings_image:wxImage_to_e3d(DiffBG),
+    wxImage:destroy(SpecBG),
+    wxImage:destroy(DiffBG),
+    [{env_spec_tex,    wings_image:new_hidden(env_spec_tex, SBG)},
+     {env_diffuse_tex, wings_image:new_hidden(env_diffuse_tex, DBG)}
+    ].
 
 make_envmap(CL, EnvImgRec0) ->
     wings_pb:start(?__(1, "Building envmaps")),
