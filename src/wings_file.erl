@@ -726,15 +726,19 @@ import_image(Name) ->
     case wings_image:from_file(Name) of
 	Im when is_integer(Im) ->
 	    keep;
-	{error,Error} ->
-		case Error of
-		100902 -> % GLU_OUT_OF_MEMORY
-			wings_u:error_msg(?__(2,"The image cannot be loaded.~nFile: \"~ts\"~n GLU Error: ~p - ~s~n"),
-				  	[Name,Error, glu:errorString(Error)]);
-		_ ->
-			wings_u:error_msg(?__(1,"Failed to load \"~ts\": ~s\n"),
-				  	[Name,file:format_error(Error)])
-		end
+	{error,100902=Error} ->  % GLU_OUT_OF_MEMORY
+            wings_u:error_msg(?__(2,"The image cannot be loaded.~nFile: "
+                                  "\"~ts\"~n GLU Error: ~p - ~s~n"),
+                              [Name, Error, glu:errorString(Error)]);
+        {error,Error} ->
+            case file:format_error(Error) of
+                "unknown" ++ _ ->
+                    wings_u:error_msg(?__(1,"Failed to load") ++ " \"~ts\": ~p\n",
+                                      [Name,Error]);
+                ErrStr ->
+                    wings_u:error_msg(?__(1,"Failed to load") ++ " \"~ts\": ~s\n",
+                                      [Name,ErrStr])
+            end
     end.
 
 %%
@@ -826,7 +830,7 @@ clean_st(St) ->
 				sel=[],ssels=Empty,saved=Limit}).
 
 clean_images(#st{saved=Limit}=St) when is_integer(Limit) ->
-    wings_dl:map(fun(D, _) -> D#dlo{proxy_data=none} end, []),
+    wings_dl:map(fun(D, _) -> D#dlo{proxy_data=none, proxy=false} end, []),
     wings_image:delete_older(Limit),
     St#st{saved=false}.
 
