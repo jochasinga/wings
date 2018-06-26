@@ -28,7 +28,7 @@
 	 %% Get the actual matrices
 	 matrix/1, inv_matrix/1,
 	 %% Transform the matrices
-	 inverse/1, translate/2, rotate/2, rotate/3, scale/2, mul/1, mul/2
+	 inverse/1, translate/2, rotate/2, rotate/3, scale/2, mul/1, mul/2, proj/6
 	]).
 
 
@@ -223,3 +223,47 @@ pick(X, Y, W, H, {X0,Y0,X1,Y1}) ->
 	    O,  O, I, O,
 	    Tx,Ty, O, I},
     init(Pick).
+
+%%--------------------------------------------------------------------
+%% @doc  Maps object coordinates to window coordinates
+%%       Equiv to glu:project/6
+%% @end
+%%--------------------------------------------------------------------
+-spec proj(X::float(), Y::float(), Z::float(),
+           Model::e3d_transform(), Proj::e3d_transform(),
+           Viewport::{integer(),integer(),integer(),integer()}
+          ) -> e3d_vector().
+proj(X, Y, Z, M, P, {X0,Y0,X1,Y1}) when tuple_size(M#mat) =:= 12, tuple_size(P#mat) =:= 12 ->
+    Mp = matrix(mul([P,M])),
+    {A,B,C,D,
+     E,F,G,H,
+     I,J,K,L} = Mp,
+    V = {X*A + Y*E + Z*I,
+         X*B + Y*F + Z*J,
+         X*C + Y*G + Z*K,
+         X*D + Y*H + Z*L},
+    {V0,V1,V2,_} = V,
+    Wx = X0 + X1 * (V0+1.0)/2,
+    Wy = Y0 + Y1 * (V1+1.0)/2,
+    Wz = V2+1.0/2,
+    {Wx, Wy, Wz};
+
+proj(X, Y, Z, M, P, {X0,Y0,X1,Y1})  when tuple_size(M#mat) =:= 16, tuple_size(P#mat) =:=16 ->
+    Mp = matrix(mul([P,M])),
+    {A,B,C,D,
+     E,F,G,H,
+     I,J,K,L,
+     M,N,O,P} = Mp,
+    V = {X*A + Y*E + Z*I + 1.0*M,
+         X*B + Y*F + Z*J + 1.0*N,
+         X*C + Y*G + Z*K + 1.0*O,
+         X*D + Y*H + Z*L + 1.0*P},
+    {V0,V1,V2,_} = V,
+    Wx = X0 + X1 * (V0+1.0)/2,
+    Wy = Y0 + Y1 * (V1+1.0)/2,
+    Wz = V2+1.0/2,
+    {Wx, Wy, Wz}.
+    
+        
+    
+    
